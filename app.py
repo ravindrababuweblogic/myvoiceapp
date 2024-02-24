@@ -1,63 +1,36 @@
-from flask import Flask, render_template, request, jsonify
-import speech_recognition as sr
-import random
-import string
+# Copyright (c) Microsoft. All rights reserved.
+# Licensed under the MIT license. See LICENSE.md file in the project root for full license information.
 
-app = Flask(__name__)
+# <code>
+import azure.cognitiveservices.speech as speechsdk
 
-@app.route('/')
-def welcome():
-    return render_template('welcome.html')
+# Creates an instance of a speech config with specified subscription key and service region.
+# Replace with your own subscription key and service region (e.g., "westus").
+speech_key, service_region = "YourSubscriptionKey", "YourServiceRegion"
+speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=service_region)
 
-@app.route('/login', methods=['POST'])
-def login():
-    # Initialize the recognizer
-    r = sr.Recognizer()
+# Set the voice name, refer to https://aka.ms/speech/voices/neural for full list.
+speech_config.speech_synthesis_voice_name = "en-US-AvaNeural"
 
-    # Use the microphone as the audio source
-    with sr.Microphone() as source:
-        print("Listening...")
-        audio = r.listen(source)
+# Creates a speech synthesizer using the default speaker as audio output.
+speech_synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config)
 
-        try:
-            # Convert the audio to text
-            text = r.recognize_google(audio)
-            print("You said: " + text)
+# Receives a text from console input.
+print("Type some text that you want to speak...")
+text = input()
 
-            # Check if the user said the correct password
-            if text.lower() == "wellsfargo":
-                return jsonify({'success': True}), 200
-            else:
-                return jsonify({'success': False, 'message': 'Incorrect password'}), 401
+# Synthesizes the received text to speech.
+# The synthesized speech is expected to be heard on the speaker with this line executed.
+result = speech_synthesizer.speak_text_async(text).get()
 
-        except:
-            # If the speech recognition failed, return an error message
-            return jsonify({'success': False, 'message': 'Speech recognition failed'}), 500
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        # Get the user's input from the form
-        name = request.form['name']
-        email = request.form['email']
-        voice = request.form['voice']
-
-        # Generate a random password
-        password = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-
-        # Save the user's information to a database or file
-        # For this example, we'll just print it to the console
-        print(f"Name: {name}")
-        print(f"Email: {email}")
-        print(f"Voice: {voice}")
-        print(f"Password: {password}")
-
-        return jsonify({'success': True}), 200
-
-    else:
-        # If the user accessed the page through a GET request,
-        # render the registration form
-        return render_template('register.html')
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# Checks result.
+if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+    print("Speech synthesized to speaker for text [{}]".format(text))
+elif result.reason == speechsdk.ResultReason.Canceled:
+    cancellation_details = result.cancellation_details
+    print("Speech synthesis canceled: {}".format(cancellation_details.reason))
+    if cancellation_details.reason == speechsdk.CancellationReason.Error:
+        if cancellation_details.error_details:
+            print("Error details: {}".format(cancellation_details.error_details))
+    print("Did you update the subscription info?")
+# </code>
