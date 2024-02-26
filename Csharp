@@ -1,0 +1,55 @@
+dotnet add package Microsoft.CognitiveServices.Speech
+dotnet add package Azure.AI.OpenAI --prerelease
+using System;
+using Azure;
+using Azure.AI.OpenAI;
+using Microsoft.CognitiveServices.Speech;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        var config = SpeechConfig.FromSubscription("YOUR_SPEECH_KEY", "YOUR_SPEECH_REGION");
+        var audioConfig = AudioConfig.FromDefaultMicrophoneInput();
+        var recognizer = new SpeechRecognizer(config, audioConfig);
+
+        var openaiKey = "YOUR_OPENAI_KEY";
+        var openaiEndpoint = "YOUR_OPENAI_ENDPOINT";
+        var openaiDeploymentName = "YOUR_OPENAI_DEPLOYMENT_NAME";
+        var client = new OpenAIClient(new Uri(openaiEndpoint))
+        {
+            ApiKey = new AzureSasCredential(openaiKey)
+        };
+
+        Console.WriteLine("Azure OpenAI is listening. Say 'Stop' or press Ctrl-Z to end the session.");
+
+        recognizer.Recognized += (s, e) =>
+        {
+            if (e.Result.Reason == ResultReason.RecognizedSpeech)
+            {
+                Console.WriteLine($"Recognized: {e.Result.Text}");
+
+                var request = new CompletionRequest("gpt-35-turbo", new[] { new Activity("system", $"You are an assistant that analyzes voice samples for identity impersonation.") }, e.Result.Text);
+                var response = client.GetCompletionsAsync(request).Result.Value.Choices[0].Message.Content;
+
+                using var synthesizer = new SpeechSynthesizer(config);
+                var result = synthesizer.SpeakTextAsync(response).Result;
+            }
+        };
+
+        recognizer.Canceled += (s, e) =>
+        {
+            Console.WriteLine($"Speech Recognition canceled: {e.Reason}");
+            if (e.Reason == CancellationReason.Error)
+            {
+                Console.WriteLine($"Error details:{e.ErrorDetails}");
+            }
+        };
+
+        recognizer.StartContinuousRecognitionAsync().Wait();
+
+        Console.ReadLine();
+
+        recognizer.StopContinuousRecognitionAsync().Wait();
+    }
+}
